@@ -2,6 +2,8 @@
 
 > its like in illustrator, but better 
 
+https://studiodumbar.github.io/paradigm-IMAGE_TRACER_2000/
+
 Drop a PNG, JPG, or JPEG into the page to posterize it and export named SVG color layers. The default preview is loaded from `src/assets/example.png`.
 
 Built with React + Vite. The production build is a **single self-contained HTML file** (JS, CSS, the p5.js dependency, and the example image are all inlined) — it still works by opening the file directly with no server, exactly like the original build-free version.
