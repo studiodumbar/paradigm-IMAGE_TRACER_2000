@@ -6,7 +6,8 @@ import {
   buildPosterCanvas,
   clearLayerGroupGeometry,
   computeEffectiveGeometryStats,
-  getLayerUnits
+  getLayerUnits,
+  reconcileLayerOrganization
 } from "../lib/layers.js";
 
 // --- per-color / per-group edge (dither/halftone) settings ----------------
@@ -71,7 +72,7 @@ export function toggleLayerSelection(layer) {
   const next = new Set(selectedLayerIds);
   if (next.has(id)) next.delete(id);
   else next.add(id);
-  useAppStore.setState({ selectedLayerIds: next });
+  useAppStore.setState({ selectedLayerIds: next, pickedLayerId: null });
 }
 
 export function setLayerColor(layer, hex) {
@@ -159,24 +160,66 @@ export function mergeSelectedLayers() {
 }
 
 export function addLayerToGroup(groupId) {
-  const { calculating, layers, selectedLayerIds, layerGroups } = useAppStore.getState();
-  if (calculating) return false;
-  const group = layerGroups.get(groupId);
-  if (!group) return false;
+  const { layers, selectedLayerIds } = useAppStore.getState();
   const selectedLayers = layers.filter(layer => !layer.groupId && selectedLayerIds.has(layerId(layer)));
   if (selectedLayers.length !== 1) return false;
-  const [layer] = selectedLayers;
-  const id = layerId(layer);
-  const remaining = layers.filter(candidate => layerId(candidate) !== id);
-  const firstMemberIndex = remaining.findIndex(candidate => candidate.groupId === groupId);
-  layer.groupId = groupId;
-  remaining.splice(firstMemberIndex + 1, 0, layer);
-  useAppStore.setState({ layers: remaining, selectedLayerIds: new Set() });
+  return moveLayerToGroup(layerId(selectedLayers[0]), groupId);
+}
+
+// Membership changes invalidate cached group silhouettes. Reconcile also
+// dissolves singleton groups and removes their obsolete edge controls.
+function commitLayerMembership(layers, affectedGroups, message) {
+  const state = useAppStore.getState();
+  const organization = {
+    layers,
+    layerGroups: new Map(state.layerGroups),
+    selectedLayerIds: new Set(state.selectedLayerIds),
+    edges: new Map(state.edges),
+    expandedEdges: new Set(state.expandedEdges)
+  };
+  for (const layer of layers) {
+    if (affectedGroups.has(layer.groupId)) clearLayerGroupGeometry(layer);
+  }
+  organization.layers = reconcileLayerOrganization(organization);
+  useAppStore.setState(organization);
   normalizeLayerStack();
-  const message = `${layer.name} added to merged layer`;
+  const { nodeCount, visibleCount } = refreshEffectiveGeometryStats();
+  useAppStore.setState({ nodeCount, visiblePixelCount: visibleCount });
   useAppStore.getState().setStatusText(message);
   useAppStore.getState().showToast(message);
   return true;
+}
+
+export function moveLayerToGroup(id, groupId) {
+  const { calculating, layers, layerGroups } = useAppStore.getState();
+  const layer = layers.find(candidate => layerId(candidate) === id);
+  if (calculating || !layer || layer.groupId === groupId || !layerGroups.has(groupId)) return false;
+  const remaining = layers.filter(candidate => candidate !== layer);
+  const lastMemberIndex = remaining.findLastIndex(candidate => candidate.groupId === groupId);
+  if (lastMemberIndex < 0) return false;
+  const previousGroupId = layer.groupId;
+  const moved = { ...layer, groupId };
+  clearLayerGroupGeometry(moved);
+  remaining.splice(lastMemberIndex + 1, 0, moved);
+  return commitLayerMembership(remaining, new Set([previousGroupId, groupId]), `${layer.name} added to merged layer`);
+}
+
+export function moveLayerOutOfGroup(id, targetKey, position = "after") {
+  const { calculating, layers, layerGroups } = useAppStore.getState();
+  const layer = layers.find(candidate => layerId(candidate) === id);
+  if (calculating || !layer?.groupId || !["before", "after"].includes(position)) return false;
+  const units = getLayerUnits(layers, layerGroups);
+  const target = units.find(unit => unit.key === targetKey);
+  if (!target) return false;
+  const remaining = layers.filter(candidate => candidate !== layer);
+  const targetMembers = target.layers.filter(candidate => candidate !== layer);
+  const anchor = position === "before" ? targetMembers[0] : targetMembers.at(-1);
+  const index = remaining.indexOf(anchor);
+  if (index < 0) return false;
+  const moved = { ...layer, groupId: null };
+  clearLayerGroupGeometry(moved);
+  remaining.splice(index + (position === "after" ? 1 : 0), 0, moved);
+  return commitLayerMembership(remaining, new Set([layer.groupId]), `${layer.name} moved out of merged layer`);
 }
 
 export function applyLayerUnitOrder(units, message) {
@@ -188,7 +231,7 @@ export function applyLayerUnitOrder(units, message) {
 }
 
 export function moveLayerUnitRelative(movingKey, targetKey, position) {
-  if (!targetKey || movingKey === targetKey) return;
+  if (useAppStore.getState().calculating || !targetKey || movingKey === targetKey) return;
   const { layers, layerGroups } = useAppStore.getState();
   const units = getLayerUnits(layers, layerGroups);
   const movingIndex = units.findIndex(unit => unit.key === movingKey);

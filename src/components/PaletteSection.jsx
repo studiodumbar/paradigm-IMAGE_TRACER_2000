@@ -6,8 +6,6 @@ import {
   mergeSelectedLayers,
   addLayerToGroup,
   unmergeLayerGroup,
-  moveLayerUnitRelative,
-  moveLayerUnitByKeyboard,
   refreshLayerRendering
 } from "../store/actions.js";
 import { getLayerUnits, layerId, getGroupEdgeTarget } from "../lib/layers.js";
@@ -15,7 +13,8 @@ import { layoutTreemap } from "../lib/treemap.js";
 import { hexToRgb } from "../lib/color.js";
 import { downloadZIP, copyCombinedSVG } from "../lib/exportActions.js";
 import EdgeTransitionPanel from "./EdgeTransitionPanel.jsx";
-import { IconMerge, IconPlus, IconClose, IconDownload, IconCopy, IconExpand, IconCollapse, IconDrag } from "./icons.jsx";
+import DragHandle from "./PaletteDragHandle.jsx";
+import { IconMerge, IconPlus, IconClose, IconDownload, IconCopy, IconExpand, IconCollapse } from "./icons.jsx";
 
 async function copyHex(hex) {
   try {
@@ -65,6 +64,7 @@ function ColorSwatchButton({ className, style, layer, share }) {
 function PaletteItem({ layer, total, selectable }) {
   const share = layer.pixels / total;
   const selectedLayerIds = useAppStore(state => state.selectedLayerIds);
+  const picked = useAppStore(state => state.pickedLayerId === layerId(layer));
   const selected = selectedLayerIds.has(layerId(layer));
   const MainTag = selectable ? "button" : "div";
   return (
@@ -72,6 +72,7 @@ function PaletteItem({ layer, total, selectable }) {
       className="palette-item"
       data-layer-id={layerId(layer)}
       data-selected={selectable && selected ? "true" : undefined}
+      data-picked={picked ? "true" : undefined}
     >
       <label className="palette-swatch-wrap" title={`Change ${layer.name} color`}>
         <span className="palette-swatch" style={{ backgroundColor: layer.hex }} />
@@ -232,67 +233,6 @@ function MergeBar() {
   );
 }
 
-function DragHandle({ unitKey, label, listRef }) {
-  const dragState = useRef(null);
-  return (
-    <button
-      className="palette-drag-handle"
-      type="button"
-      data-unit-key={unitKey}
-      aria-label={`Reorder ${label}. Drag, or use arrow keys.`}
-      title="Drag to reorder · Arrow keys move"
-      onPointerDown={event => {
-        if (useAppStore.getState().calculating || (event.button !== undefined && event.button !== 0)) return;
-        event.preventDefault();
-        event.currentTarget.focus({ preventScroll: true });
-        const element = event.currentTarget.closest(".palette-output-unit");
-        dragState.current = { pointerId: event.pointerId, startY: event.clientY, moved: false, targetKey: null, position: "before", element };
-        event.currentTarget.setPointerCapture(event.pointerId);
-      }}
-      onPointerMove={event => {
-        const drag = dragState.current;
-        if (!drag || drag.pointerId !== event.pointerId) return;
-        if (!drag.moved && Math.abs(event.clientY - drag.startY) < 4) return;
-        drag.moved = true;
-        drag.element.classList.add("is-dragging");
-        const list = listRef.current;
-        if (!list) return;
-        list.querySelectorAll(".is-drop-before, .is-drop-after").forEach(el => el.classList.remove("is-drop-before", "is-drop-after"));
-        const candidates = Array.from(list.querySelectorAll(".palette-output-unit")).filter(el => el.dataset.unitKey !== unitKey);
-        if (!candidates.length) { drag.targetKey = null; return; }
-        let target = candidates.find(el => event.clientY < el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2);
-        let position = "before";
-        if (!target) { target = candidates.at(-1); position = "after"; }
-        target.classList.add(position === "before" ? "is-drop-before" : "is-drop-after");
-        drag.targetKey = target.dataset.unitKey;
-        drag.position = position;
-      }}
-      onPointerUp={event => {
-        const drag = dragState.current;
-        if (!drag || drag.pointerId !== event.pointerId) return;
-        drag.element.classList.remove("is-dragging");
-        listRef.current?.querySelectorAll(".is-drop-before, .is-drop-after").forEach(el => el.classList.remove("is-drop-before", "is-drop-after"));
-        dragState.current = null;
-        if (drag.moved && drag.targetKey) moveLayerUnitRelative(unitKey, drag.targetKey, drag.position);
-      }}
-      onPointerCancel={() => {
-        const drag = dragState.current;
-        if (drag) {
-          drag.element.classList.remove("is-dragging");
-          listRef.current?.querySelectorAll(".is-drop-before, .is-drop-after").forEach(el => el.classList.remove("is-drop-before", "is-drop-after"));
-        }
-        dragState.current = null;
-      }}
-      onKeyDown={event => {
-        const destination = { ArrowUp: -1, ArrowDown: 1, Home: "first", End: "last" }[event.key];
-        if (destination === undefined) return;
-        event.preventDefault();
-        moveLayerUnitByKeyboard(unitKey, destination);
-      }}
-    ><IconDrag /></button>
-  );
-}
-
 function PaletteUnit({ unit, total, listRef }) {
   const selectedLayerIds = useAppStore(state => state.selectedLayerIds);
   const canAddToGroup = selectedLayerIds.size === 1;
@@ -310,33 +250,39 @@ function PaletteUnit({ unit, total, listRef }) {
   }
   const groupEdgeTarget = getGroupEdgeTarget(unit);
   return (
-    <div className="palette-output-unit palette-group-unit" data-unit-key={unit.key} role="listitem">
+    <div className="palette-output-unit palette-group-unit" data-unit-key={unit.key} data-group-id={unit.group.id} role="listitem">
       <div className="palette-group" style={{ "--group-member-count": unit.layers.length }} role="group" aria-label={`Merged layer containing ${unit.layers.length} colors`}>
-        <GroupColorControl unit={unit} edgeTarget={groupEdgeTarget} />
-        <div className="palette-group-actions">
-          <DragHandle unitKey={unit.key} label={`merged layer of ${unit.layers.length} colors`} listRef={listRef} />
-          <button
-            className="palette-group-add"
-            type="button"
-            data-group-id={unit.group.id}
-            disabled={!canAddToGroup}
-            title="Add selected color to this merged layer"
-            aria-label={canAddToGroup ? "Add selected color to this merged layer" : "Select exactly one color to add it to this merged layer"}
-            onClick={() => addLayerToGroup(unit.group.id)}
-          ><IconPlus /></button>
-          <button
-            className="palette-group-remove"
-            type="button"
-            data-group-id={unit.group.id}
-            aria-label={`Remove merged state from ${unit.layers.length} colors`}
-            title="Remove merged state"
-            onClick={() => unmergeLayerGroup(unit.group.id)}
-          ><IconClose /></button>
+        <div className="palette-group-header">
+          <span className="palette-group-label">Merged · {unit.layers.length} colors</span>
+          <div className="palette-group-actions">
+            <DragHandle unitKey={unit.key} label={`merged layer of ${unit.layers.length} colors`} listRef={listRef} />
+            <button
+              className="palette-group-add"
+              type="button"
+              data-group-id={unit.group.id}
+              disabled={!canAddToGroup}
+              title="Add selected color to this merged layer"
+              aria-label={canAddToGroup ? "Add selected color to this merged layer" : "Select exactly one color to add it to this merged layer"}
+              onClick={() => addLayerToGroup(unit.group.id)}
+            ><IconPlus /></button>
+            <button
+              className="palette-group-remove"
+              type="button"
+              data-group-id={unit.group.id}
+              aria-label={`Remove merged state from ${unit.layers.length} colors`}
+              title="Remove merged state"
+              onClick={() => unmergeLayerGroup(unit.group.id)}
+            ><IconClose /></button>
+          </div>
         </div>
+        <GroupColorControl unit={unit} edgeTarget={groupEdgeTarget} />
         <div className="palette-group-members">
           {unit.layers.map(layer => (
             <div key={layerId(layer)} className="palette-group-member" role="group" aria-label={`${layer.name}, ${layer.hex}`}>
-              <PaletteItem layer={layer} total={total} selectable={false} />
+              <div className="palette-row-shell">
+                <PaletteItem layer={layer} total={total} selectable={false} />
+                <DragHandle unitKey={`layer:${layerId(layer)}`} label={layer.name} listRef={listRef} sourceGroupKey={unit.key} />
+              </div>
               <EdgeTransitionPanel target={layer} panelIndex={`${unit.key}-${layerId(layer)}`} />
             </div>
           ))}
@@ -367,7 +313,7 @@ export default function PaletteSection() {
       <h2 className="section-title" id="output-title"><span>Layer output</span><span className="section-number">02</span></h2>
       <StatsRow />
       <PaletteVisualRow />
-      <p className="palette-guide">Click swatches to recolor · click layers to select · drag ⋮ to reorder</p>
+      <p className="palette-guide">Click swatches to recolor · click layers to select. Drag handles to reorder or move colors into and out of groups.</p>
       <MergeBar />
       <div className="palette" id="palette" role="list" aria-label="Extracted color layers" ref={listRef}>
         {units.map(unit => <PaletteUnit key={unit.key} unit={unit} total={total} listRef={listRef} />)}

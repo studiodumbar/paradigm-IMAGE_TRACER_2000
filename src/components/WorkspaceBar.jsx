@@ -3,7 +3,7 @@ import { useAppStore } from "../store/useAppStore.js";
 import { posterize, cancelScheduledPosterize, scheduleSemiPosterize } from "../lib/posterize.js";
 import { fitArtwork, zoomBy } from "../canvas/engine.js";
 import { getLayerUnits } from "../lib/layers.js";
-import { IconZoomIn, IconZoomOut, IconFit, IconReset } from "./icons.jsx";
+import { IconZoomIn, IconZoomOut, IconFit, IconReset, IconEyedropper } from "./icons.jsx";
 import InfoDialog from "./InfoDialog.jsx";
 
 const VIEW_TABS = [
@@ -120,8 +120,27 @@ function clampPercent(value) {
 }
 
 function CanvasActions({ sketchRef }) {
+  const tool = useAppStore(state => state.canvasTool);
+  const available = useAppStore(state => state.ready && state.layers.length > 0 && !state.calculating);
   return (
-    <div className="canvas-actions">
+    <div className="canvas-actions" onClick={event => {
+      if (["zoom-out", "zoom-in", "fit", "reset-layers"].includes(event.target.closest("button")?.id)) {
+        document.getElementById("canvas-wrap")?.focus({ preventScroll: true });
+      }
+    }}>
+      <button
+        className="icon-button picker-button"
+        type="button"
+        aria-label="Pick a color layer"
+        aria-pressed={tool === "picker"}
+        aria-keyshortcuts="E"
+        title="Pick a color layer (E) · Escape to exit"
+        disabled={!available}
+        onClick={() => {
+          useAppStore.getState().setCanvasTool(tool === "picker" ? "select" : "picker");
+          document.getElementById("canvas-wrap")?.focus({ preventScroll: true });
+        }}
+      ><IconEyedropper /></button>
       <button className="icon-button" id="zoom-out" type="button" aria-label="Zoom out" onClick={() => zoomBy(sketchRef.current, .8)}><IconZoomOut /></button>
       <button className="icon-button" id="zoom-in" type="button" aria-label="Zoom in" onClick={() => zoomBy(sketchRef.current, 1.25)}><IconZoomIn /></button>
       <button className="icon-button" id="fit" type="button" aria-label="Fit artwork to screen" title="Fit to screen" onClick={() => fitArtwork(sketchRef.current)}><IconFit /></button>

@@ -71,6 +71,8 @@ export function createInitialState() {
 
     // Rendering/viewport
     view: "split",
+    canvasTool: "select",
+    pickedLayerId: null,
     posterCanvas: null,
     scale: 1,
     fitScale: 1,
@@ -84,7 +86,7 @@ export function createInitialState() {
     // Misc
     ready: false,
     statusText: "Local processing",
-    toastMessage: null,
+    toasts: [],
     toastToken: 0,
     colorTooltip: null,
 
@@ -100,6 +102,7 @@ export const useAppStore = create(subscribeWithSelector((set, get) => ({
   // --- generic leaf setters -------------------------------------------
   setName: name => set({ name }),
   setView: view => set({ view }),
+  setCanvasTool: canvasTool => set({ canvasTool }),
   setPaletteCount: paletteCount => set({ paletteCount }),
   setQuantizationMode: quantizationMode => set({ quantizationMode }),
   setAlpha: alpha => set({ alpha }),
@@ -114,7 +117,11 @@ export const useAppStore = create(subscribeWithSelector((set, get) => ({
   setOffset: (offsetX, offsetY) => set({ offsetX, offsetY }),
   setFitScale: fitScale => set({ fitScale }),
 
-  showToast: message => set(state => ({ toastMessage: message, toastToken: state.toastToken + 1 })),
+  showToast: message => set(state => ({
+    toastToken: state.toastToken + 1,
+    toasts: [...state.toasts, { id: state.toastToken + 1, message }].slice(-4)
+  })),
+  dismissToast: id => set(state => ({ toasts: state.toasts.filter(toast => toast.id !== id) })),
 
   showColorTooltip: (hex, clientX, clientY) => set({ colorTooltip: { hex, clientX, clientY, copied: false, copyToken: 0 } }),
   moveColorTooltip: (clientX, clientY) => set(state => state.colorTooltip ? ({ colorTooltip: { ...state.colorTooltip, clientX, clientY } }) : {}),

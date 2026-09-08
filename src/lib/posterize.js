@@ -370,6 +370,7 @@ export async function loadImageFromSrc(src, name) {
     edges: new Map(),
     expandedEdges: new Set(),
     selectedLayerIds: new Set(),
+    pickedLayerId: null,
     layerGroups: new Map(),
     nextLayerId: 1,
     nextLayerGroupId: 1,

@@ -102,6 +102,14 @@ export function IconZoomIn(props) {
   );
 }
 
+export function IconEyedropper(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m9.5 3.5 2-2a1.8 1.8 0 0 1 2.5 2.5l-2 2M8 3l5 5M9 5l-6.5 6.5L2 14l2.5-.5L11 7" />
+    </svg>
+  );
+}
+
 export function IconZoomOut(props) {
   return (
     <svg {...base} {...props}>
