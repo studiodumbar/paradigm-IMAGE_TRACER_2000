@@ -7,8 +7,90 @@ export function colorDistance(a, b) {
   return dr * dr * .30 + dg * dg * .59 + db * db * .11;
 }
 
-// Weighted median-cut builds a compact palette from actual source colors.
-export function extractPalette(pixels, alphaCutoff, targetCount, toneLut, toneBlack, toneWhite) {
+// sRGB → Oklab, using Björn Ottosson's public-domain conversion matrices.
+// https://bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab
+export function rgbToOklab(rgb) {
+  const [r, g, b] = rgb.map(value => {
+    const channel = value / 255;
+    return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+  });
+  const l = Math.cbrt(.4122214708 * r + .5363325363 * g + .0514459929 * b);
+  const m = Math.cbrt(.2119034982 * r + .6806995451 * g + .1073969566 * b);
+  const s = Math.cbrt(.0883024619 * r + .2817188376 * g + .6299787005 * b);
+  return [
+    .2104542553 * l + .7936177850 * m - .0040720468 * s,
+    1.9779984951 * l - 2.4285922050 * m + .4505937099 * s,
+    .0259040371 * l + .7827717662 * m - .8086757660 * s
+  ];
+}
+
+function extractVibrantPalette(colors, targetCount) {
+  const bins = new Map();
+  let total = 0;
+  let maxChroma = 0;
+  for (const item of colors) {
+    const lab = rgbToOklab(item.rgb);
+    const chroma = Math.hypot(lab[1], lab[2]);
+    maxChroma = Math.max(maxChroma, chroma);
+    total += item.count;
+    // Pool nearby samples so photographic noise cannot win on uniqueness.
+    const key = lab.map(value => Math.floor(value / .04)).join(",");
+    const bin = bins.get(key);
+    if (bin) {
+      bin.count += item.count;
+      if (chroma > bin.chroma) Object.assign(bin, { rgb: item.rgb, lab, chroma });
+    } else {
+      bins.set(key, { rgb: item.rgb, lab, chroma, count: item.count });
+    }
+  }
+  // Neutral images should retain their tonal range without inventing color.
+  if (maxChroma < .03) return extractMedianPalette(colors, targetCount);
+
+  const candidates = Array.from(bins.values());
+  // Keep the requested palette size when a narrow color range shares bins.
+  if (candidates.length < targetCount) {
+    const representatives = new Set(candidates.map(item => item.rgb));
+    for (const item of colors) {
+      if (representatives.has(item.rgb)) continue;
+      const lab = rgbToOklab(item.rgb);
+      candidates.push({ ...item, lab, chroma: Math.hypot(lab[1], lab[2]) });
+    }
+  }
+  const minSupport = Math.max(2, total * .0005);
+  const supported = candidates.filter(item => item.count >= minSupport);
+  // Sparse artwork may have fewer supported bins than requested colors.
+  const pool = supported.length >= targetCount ? supported : candidates;
+  for (const item of pool) {
+    // Chroma drives priority; logarithmic population preserves small accents.
+    // A neutral baseline leaves room for useful shadow/highlight anchors.
+    item.priority = (.05 + 4 * item.chroma ** 2) * Math.log2(1 + item.count);
+    item.distance = Infinity;
+  }
+  const selected = [];
+  while (selected.length < targetCount && selected.length < pool.length) {
+    let best = null;
+    let bestScore = -1;
+    for (const item of pool) {
+      if (item.selected) continue;
+      const score = item.priority * (selected.length ? item.distance : 1);
+      if (score > bestScore) { best = item; bestScore = score; }
+    }
+    best.selected = true;
+    selected.push(best.rgb);
+    for (const item of pool) {
+      const dl = item.lab[0] - best.lab[0];
+      const da = item.lab[1] - best.lab[1];
+      const db = item.lab[2] - best.lab[2];
+      // Favor distinct hues over many lightness variants of the same hue.
+      item.distance = Math.min(item.distance, .25 * dl * dl + da * da + db * db);
+    }
+  }
+  return selected;
+}
+
+export function extractPalette(pixels, alphaCutoff, targetCount, toneLut, toneBlack, toneWhite, mode = "median") {
+  if (mode !== "median" && mode !== "vibrant") throw new Error(`Unknown quantization mode: ${mode}`);
+  if (!Number.isInteger(targetCount) || targetCount < 1) throw new Error("Palette size must be a positive integer");
   const pixelCount = pixels.length / 4;
   const step = Math.max(1, Math.ceil(pixelCount / 50000));
   const histogram = new Map();
@@ -27,6 +109,11 @@ export function extractPalette(pixels, alphaCutoff, targetCount, toneLut, toneBl
   if (!colors.length) return [];
   if (colors.length <= targetCount) return colors.sort((a, b) => b.count - a.count).map(item => item.rgb);
 
+  return mode === "vibrant" ? extractVibrantPalette(colors, targetCount) : extractMedianPalette(colors, targetCount);
+}
+
+// Weighted median-cut splits by population, then averages each RGB box.
+function extractMedianPalette(colors, targetCount) {
   const boxes = [colors];
   while (boxes.length < targetCount) {
     let splitIndex = -1;

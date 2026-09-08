@@ -33,17 +33,20 @@ const { posterize } = await import("../src/lib/posterize.js");
 const { makeCombinedSVG } = await import("../src/lib/svgExport.js");
 
 const png = PNG.sync.read(readFileSync(new URL("../src/assets/example.png", import.meta.url)));
+const quantizationMode = process.argv[2] || "vibrant";
+if (!["vibrant", "median"].includes(quantizationMode)) throw new Error("Use vibrant or median");
 
 useAppStore.setState({
   name: "example.png",
   pixels: png.data,
   width: png.width,
   height: png.height,
-  ready: true
+  ready: true,
+  quantizationMode
 });
 
 console.log(`decoded example.png: ${png.width}x${png.height}`);
-console.log("running posterize() with default settings (paletteCount=4, alpha=1, smooth=0)...");
+console.log(`running posterize() with ${quantizationMode} and default settings (paletteCount=8, alpha=1, smooth=0)...`);
 
 const started = Date.now();
 await posterize();

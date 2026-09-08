@@ -103,6 +103,39 @@ function PosterizeSlider() {
   );
 }
 
+function QuantizationControl() {
+  const mode = useAppStore(state => state.quantizationMode);
+  return (
+    <div className="control">
+      <div className="control-head">
+        <span className="control-label" id="quantization-label">Color selection</span>
+      </div>
+      <div className="transition-method quantization-method" role="radiogroup" aria-labelledby="quantization-label" aria-describedby="quantization-hint">
+        {[["vibrant", "Vibrant"], ["median", "Median"]].map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name="quantization-mode"
+              value={value}
+              checked={mode === value}
+              onChange={() => {
+                useAppStore.getState().setQuantizationMode(value);
+                queuePosterize();
+              }}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+      <p className="hint" id="quantization-hint">
+        {mode === "vibrant"
+          ? "Favor vivid source colors and distinct hues, even in small accents."
+          : "Balance the palette by pixel coverage, averaging colors in each group."}
+      </p>
+    </div>
+  );
+}
+
 function AlphaSlider() {
   const alpha = useAppStore(state => state.alpha);
   return (
@@ -124,7 +157,7 @@ function AlphaSlider() {
           queuePosterize();
         }}
       />
-      <p className="hint">1 preserves every visible pixel; raise it to trim translucent antialiasing.</p>
+      <p className="hint">1 keeps every nontransparent source pixel; raise it to trim translucent edges. Fully opaque images are unaffected.</p>
     </div>
   );
 }
@@ -167,6 +200,7 @@ export default function Sidebar() {
         <h2 className="section-title" id="trace-title"><span>Trace settings</span><span className="section-number">01</span></h2>
         <PosterizeSlider />
         <ToneCurve />
+        <QuantizationControl />
         <AlphaSlider />
         <SmoothSlider />
       </section>

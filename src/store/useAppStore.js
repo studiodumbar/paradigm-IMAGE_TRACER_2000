@@ -37,6 +37,7 @@ export function createInitialState() {
 
     // Posterize settings (inputs)
     paletteCount: 8,
+    quantizationMode: "vibrant",
     alpha: 1,
     smooth: 0,
     calculationMode: "auto",
@@ -100,6 +101,7 @@ export const useAppStore = create(subscribeWithSelector((set, get) => ({
   setName: name => set({ name }),
   setView: view => set({ view }),
   setPaletteCount: paletteCount => set({ paletteCount }),
+  setQuantizationMode: quantizationMode => set({ quantizationMode }),
   setAlpha: alpha => set({ alpha }),
   setSmooth: smooth => set({ smooth }),
   setToneRange: (toneBlack, toneWhite) => set({ toneBlack, toneWhite }),

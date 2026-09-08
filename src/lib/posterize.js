@@ -93,7 +93,7 @@ export async function posterize(revision = useAppStore.getState().calculationRev
   };
   if (!isCurrent()) { abandon(); return; }
 
-  const { pixels, width, height, alpha, paletteCount, smooth, isLarge, toneLut, toneBlack, toneWhite } = useAppStore.getState();
+  const { pixels, width, height, alpha, paletteCount, quantizationMode, smooth, isLarge, toneLut, toneBlack, toneWhite } = useAppStore.getState();
 
   const previousLayers = useAppStore.getState().layers.slice();
   const previousPositions = new Map(previousLayers.map(layer => [layer.id || layer.hex, {
@@ -104,7 +104,7 @@ export async function posterize(revision = useAppStore.getState().calculationRev
   const previousOrder = previousLayers.map(layer => layer.id || layer.hex);
   const previousGroups = new Map(Array.from(useAppStore.getState().layerGroups, ([id, group]) => [id, { ...group }]));
 
-  const palette = extractPalette(pixels, alpha, paletteCount, toneLut, toneBlack, toneWhite);
+  const palette = extractPalette(pixels, alpha, paletteCount, toneLut, toneBlack, toneWhite, quantizationMode);
   useAppStore.setState({ progressValue: 12, progressLabel: "Palette" });
   await nextPaint();
   if (!isCurrent()) { abandon(); return; }
@@ -168,10 +168,12 @@ export async function posterize(revision = useAppStore.getState().calculationRev
       const color = palette[nearest];
       const hex = rgbToHex(color);
       const edge = getEdge(hex);
-      const involvement = colorInvolvement(source, color);
-      let assigned = involvement >= .5 ? nearest : -1;
+      // Palette distance chooses a color, never transparency. Only an explicit
+      // dither treatment may discard a pixel that passed the source filters.
+      let assigned = nearest;
       let diffuseError = null;
       if (edge.mode === "dither") {
+        const involvement = colorInvolvement(source, color);
         const colorStart = 1 - edge.colorReach / 100;
         const whiteEnd = edge.whiteReach / 100;
         if (colorStart > whiteEnd) {

@@ -4,6 +4,7 @@ import { posterize, cancelScheduledPosterize, scheduleSemiPosterize } from "../l
 import { fitArtwork, zoomBy } from "../canvas/engine.js";
 import { getLayerUnits } from "../lib/layers.js";
 import { IconZoomIn, IconZoomOut, IconFit, IconReset } from "./icons.jsx";
+import InfoDialog from "./InfoDialog.jsx";
 
 const VIEW_TABS = [
   ["original", "Original"],
@@ -139,6 +140,7 @@ function CanvasActions({ sketchRef }) {
           sketchRef.current?.redraw();
         }}
       ><IconReset /></button>
+      <InfoDialog />
     </div>
   );
 }

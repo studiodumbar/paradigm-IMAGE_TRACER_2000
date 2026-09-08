@@ -623,6 +623,60 @@
 
     .icon-button:hover { background: var(--red); color: white; }
 
+    .info-dialog {
+      width: min(480px, calc(100% - 32px));
+      max-height: calc(100dvh - 32px);
+      margin: auto;
+      padding: 28px;
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+    }
+
+    .info-dialog::backdrop { background: rgb(0 0 0 / 24%); }
+
+    .info-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .info-header h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: -.6px;
+    }
+
+    .info-header .icon-button { flex-shrink: 0; }
+
+    .info-intro {
+      margin: 24px 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .info-updates {
+      border-top: 1px solid var(--line);
+      padding-top: 20px;
+    }
+
+    .info-updates h3 {
+      margin: 0 0 20px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .info-release + .info-release { margin-top: 24px; }
+    .info-release h4 { margin: 0 0 10px; font-size: 15px; }
+    .info-release ul { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
+    .info-release li + li { margin-top: 6px; }
+
     .zoom-readout {
       min-width: 54px;
       color: var(--red);
@@ -1207,6 +1261,9 @@
 
     .transition-method input:checked + span { background: var(--red); color: #fff; }
     .transition-method input:focus-visible + span { outline: 2px solid var(--red); outline-offset: 3px; }
+
+    .quantization-method { margin-bottom: 0; }
+    .quantization-method span { min-height: 32px; font-size: 10px; }
 
     .transition-preview {
       position: relative;
